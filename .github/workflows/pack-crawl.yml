@@ -1,0 +1,195 @@
+name: pack-crawl
+
+# 剧库数据包：抓取 -> 打包 -> 提交回本仓库 -> jsDelivr 分发
+#
+# 为什么跑在公开仓库：GitHub 对 public 仓库的标准 runner **不计分钟**，
+# private 仓 Free 套餐只有 2000 分钟/月。全量 61 万部按 3 请求/秒要 55 小时，
+# 私库额度一个月只够跑 5 轮，公开仓库想跑就跑。
+# 顺带好处：同一个仓库 push 用内置 GITHUB_TOKEN 即可，不用再存长效 PAT。
+#
+# 为什么不用 Cloudflare Pages / Workers：
+#   - pages.dev 在国内完全连不上（cloudflare.com 都 16 秒超时），
+#     而 cdn/gcore/fastly.jsdelivr.net 三个节点全通，fastly 下 1.27MB 只要 0.58 秒
+#   - Workers 免费版 CPU 只有 10ms、单次最多 50 个子请求，一趟抓取九万个请求碾不过去
+#
+# 两条腿走路：
+#   1) 关键词抽样 —— 一次请求换 10 部完整信息，便宜，但词表挖到 2000 个就干涸
+#   2) sitemap + 详情页穷举 —— 全站 611,059 个 id（19 秒扫完），一个 id 一次请求
+#      代价大但确定能走完，长尾只能靠它
+
+on:
+  workflow_dispatch:
+    inputs:
+      words:
+        description: '关键词阶段最多发多少请求（0 = 不限）'
+        default: '800'
+      wmin:
+        description: '关键词阶段的分钟上限（防止把整轮预算吃光）'
+        default: '15'
+      minutes:
+        description: '按 id 补齐阶段的分钟预算'
+        default: '290'
+      workers:
+        description: '并发数 1~16'
+        default: '6'
+  schedule:
+    # 每天 19:37 UTC = 次日 03:37 北京时间。全量补齐约需 2 周。
+    # 刻意避开整点：GitHub 的定时器在整点前后最拥堵，实测经常延迟十几分钟甚至整轮跳过，
+    # 排在 :37 这种边角位置被吞掉的概率低得多。
+    - cron: '37 19 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pack-crawl
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 恢复上一轮的抓取库
+        run: |
+          mkdir -p scripts/_pack
+          BEST=""
+          [ -f state/catalog.db.gz ] && BEST=state/catalog.db.gz
+          # **main 会被人手推的配置提交顶掉**：发布走的是孤儿提交 + force push，
+          # 只要有人从旧基线普通推送一次配置，上一轮抓的数据就整棵没了。
+          # 所以每轮额外往 `state-keep` 分支存一份，恢复时取更大的那个。
+          if curl -sfL --max-time 120 -o /tmp/sk.db.gz \
+               "https://raw.githubusercontent.com/${{ github.repository }}/state-keep/state/catalog.db.gz"; then
+            if [ -z "$BEST" ] || [ "$(stat -c%s /tmp/sk.db.gz)" -gt "$(stat -c%s "$BEST")" ]; then
+              BEST=/tmp/sk.db.gz
+              echo "用 state-keep 分支的快照（比 main 里的大）"
+            fi
+          fi
+          if [ -n "$BEST" ]; then
+            gunzip -c "$BEST" > scripts/_pack/catalog.db
+            echo "恢复成功：$(du -h scripts/_pack/catalog.db | cut -f1)"
+          else
+            echo "第一轮，从零开始"
+          fi
+
+      - name: 关键词抽样
+        # **这一阶段必须限时**。它排在流水线最前面，而 fill 拿的是固定分钟预算；
+        # 2026-11-02 那轮关键词跑了 52 分钟还没结束（搜索接口对机房出口限流，
+        # 每个词都在退避重试），差点把 350 分钟的 job 上限吃光。被超时杀掉的话，
+        # 发布和 state-keep 都在最后一步，整轮白跑。墙钟上限 + 请求上限双保险。
+        run: |
+          W="${{ github.event.inputs.words }}"; W="${W:-800}"
+          KM="${{ github.event.inputs.wmin }}"; KM="${KM:-15}"
+          K="${{ github.event.inputs.workers }}"; K="${K:-6}"
+          python scripts/catalog_pack.py crawl --add 0 --words "$W" --minutes "$KM" --workers "$K"
+
+      - name: 扫全站 id
+        run: python scripts/catalog_pack.py sitemap
+
+      - name: 按 id 补齐
+        run: |
+          M="${{ github.event.inputs.minutes }}"; M="${M:-290}"
+          K="${{ github.event.inputs.workers }}"; K="${K:-6}"
+          python scripts/catalog_pack.py fill --minutes "$M" --workers "$K"
+
+      - name: 打包
+        run: |
+          python scripts/catalog_pack.py build \
+            --base "https://cdn.jsdelivr.net/gh/${{ github.repository }}@main"
+
+      - name: 存快照
+        run: python scripts/catalog_pack.py snapshot
+
+      # 每轮都重新组装一份「孤儿提交」再强推：仓库里只留当前内容，历史不累积。
+      # scripts/ 和 .github/ 必须跟着一起推，否则下一轮 checkout 回来就没有脚本和 workflow 了。
+      #
+      # **上一代的分片要留着**：jsDelivr 对 `@main` 的分支解析按节点缓存 12 小时，
+      # purge 清得掉文件缓存、清不掉这层解析，实测同一时刻不同节点会返回差好几代的清单。
+      # 老清单还指着老分片名，全删掉的话拿到旧清单的用户直接 404。两代并存足够覆盖
+      # 12 小时（每 2~3 天一轮，最多落后一代）。
+      - name: 发布
+        run: |
+          set -euo pipefail
+          OUT=scripts/_pack/out
+          PUB=/tmp/pub
+          rm -rf "$PUB"; mkdir -p "$PUB/scripts" "$PUB/.github/workflows"
+          cp "$OUT"/catalog.json "$PUB"/
+          cp "$OUT"/*.jsonl.gz "$PUB"/ || true
+          cp -r "$OUT"/state "$PUB"/state
+          # 仓库根上还留着的旧分片全部带上（同名不覆盖）：CDN 的分支解析缓存
+          # 让用户可能拿到好几代之前的清单，那些清单指着这些老文件名。
+          for f in *.jsonl.gz; do
+            [ -f "$f" ] && cp -n "$f" "$PUB"/ 2>/dev/null || true
+          done
+          echo "分片：$(ls "$PUB"/*.jsonl.gz 2>/dev/null | wc -l) 个（含历史代）"
+          cp scripts/catalog_pack.py "$PUB/scripts/"
+          cp .github/workflows/pack-crawl.yml "$PUB/.github/workflows/"
+          cat > "$PUB/README.md" <<'EOF'
+          # 媒体库离线数据分片
+
+          由 GitHub Actions 自动生成，每轮覆盖（不是一个持续追加的仓库）。
+
+          - `catalog.json` — 清单，App 只读这一个
+          - `*.jsonl.gz` — 分片，一行一部
+          - `state/` — 抓取库快照，只给下一轮 Actions 恢复用，App 不下载
+          - `scripts/` — 抓取脚本
+
+          分发走 jsDelivr，前缀见 `catalog.json` 里各分片的 `url` 字段。
+          EOF
+          cd "$PUB"
+          git init -q -b main
+          git config user.name  "pack-bot"
+          git config user.email "pack-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "数据包 $(date -u +%Y-%m-%dT%H:%MZ)"
+          echo "共 $(du -sh . | cut -f1)"
+          git push -q --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" main
+
+      # 数据保险：main 是「孤儿提交 + force push」的一锤子买卖，只要有人从旧基线
+      # 普通推一次配置，整棵树（含 state/）就被顶掉，这一轮抓的全白干。
+      # 所以每轮再单独把抓取库快照存到一个只放这一个文件的分支，下一轮恢复时
+      # 两个来源取更大的那个。
+      - name: 备份抓取库到 state-keep
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          BK=/tmp/state-keep
+          rm -rf "$BK"; mkdir -p "$BK/state"
+          cp scripts/_pack/out/state/catalog.db.gz "$BK/state/"
+          cd "$BK"
+          git init -q -b state-keep
+          git config user.name  "pack-bot"
+          git config user.email "pack-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "state $(date -u +%Y-%m-%dT%H:%MZ)"
+          echo "快照 $(du -h state/catalog.db.gz | cut -f1)"
+          git push -q --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" state-keep
+
+      # 清单会被 CDN 缓存 12 小时（s-maxage=43200），带 query 也绕不过去。
+      # jsDelivr 的 purge 端点不需要 key，推完主动清一次（清单 + 通配都发一遍，
+      # 实测清不干净分支解析那层，所以发布环节还额外保留上一代分片兜底）。
+      - name: 清 CDN 缓存
+        continue-on-error: true
+        run: |
+          R=""
+          for P in "catalog.json" "*"; do
+            RES=$(curl -s --max-time 60 \
+              "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$P")
+            echo "$RES" | head -c 200; echo
+            R="$R$RES"
+          done
+          echo "$R" | grep -q '"status": *"finished"' \
+            && echo "缓存已清" \
+            || echo "::warning::purge 没确认成功，清单可能要等 12 小时才更新"
