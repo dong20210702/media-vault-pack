@@ -1,0 +1,115 @@
+{
+ "version": 1795845769,
+ "built": "2026-11-28",
+ "total": 665746,
+ "shards": [
+  {
+   "id": "real-drama-00-d4d20d3b",
+   "kind": "real-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/real-drama-00-d4d20d3b.jsonl.gz",
+   "bytes": 3668508,
+   "count": 60000
+  },
+  {
+   "id": "real-drama-01-0dc6d0d1",
+   "kind": "real-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/real-drama-01-0dc6d0d1.jsonl.gz",
+   "bytes": 3672416,
+   "count": 60000
+  },
+  {
+   "id": "real-drama-02-dd7de410",
+   "kind": "real-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/real-drama-02-dd7de410.jsonl.gz",
+   "bytes": 311552,
+   "count": 4068
+  },
+  {
+   "id": "comic-drama-00-b04fc93e",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-00-b04fc93e.jsonl.gz",
+   "bytes": 3161599,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-01-bd1e56a9",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-01-bd1e56a9.jsonl.gz",
+   "bytes": 3292526,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-02-734181c3",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-02-734181c3.jsonl.gz",
+   "bytes": 3295529,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-03-fce5b558",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-03-fce5b558.jsonl.gz",
+   "bytes": 3368139,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-04-f31f67d3",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-04-f31f67d3.jsonl.gz",
+   "bytes": 3452075,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-05-03cc0212",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-05-03cc0212.jsonl.gz",
+   "bytes": 3498390,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-06-b1bbea05",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-06-b1bbea05.jsonl.gz",
+   "bytes": 3534171,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-07-443439de",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-07-443439de.jsonl.gz",
+   "bytes": 3553788,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-08-3a8a317a",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-08-3a8a317a.jsonl.gz",
+   "bytes": 3632626,
+   "count": 60000
+  },
+  {
+   "id": "comic-drama-09-29de9eb8",
+   "kind": "comic-drama",
+   "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/comic-drama-09-29de9eb8.jsonl.gz",
+   "bytes": 127939,
+   "count": 1678
+  }
+ ],
+ "gone": {
+  "id": "gone-30a55aa6",
+  "url": "https://cdn.jsdelivr.net/gh/dong20210702/media-vault-pack@main/gone-30a55aa6.txt.gz",
+  "bytes": 16558,
+  "count": 1822
+ },
+ "routes": [
+  "jsd:fastly.jsdelivr.net",
+  "jsd:cdn.jsdelivr.net",
+  "jsd:gcore.jsdelivr.net",
+  "raw:raw.githubusercontent.com",
+  "https://ghfast.top/",
+  "https://gh-proxy.com/",
+  "https://ghproxy.net/",
+  "https://gh.llkk.cc/",
+  "https://ghproxy.com/"
+ ]
+}
